@@ -40,6 +40,10 @@ class SLUTagging(nn.Module):
         hiddens = self.dropout_layer(rnn_out)
         # 通过输出层得到标签的输出
         tag_output = self.output_layer(hiddens, tag_mask, tag_ids)
+        print(tag_output[0].size())
+        # print(tag_ids[0])
+        # print(tag_output[0][0])
+        # exit()
 
         return tag_output
 
@@ -66,6 +70,7 @@ class SLUTagging(nn.Module):
             for idx, tid in enumerate(pred):
                 tag = label_vocab.convert_idx_to_tag(tid)
                 pred_tags.append(tag)
+                print(tag)
                 # 使用 B-I 标记方案来识别和提取实体
                 if (tag == 'O' or tag.startswith('B')) and len(tag_buff) > 0:
                     slot = '-'.join(tag_buff[0].split('-')[1:])
@@ -78,6 +83,7 @@ class SLUTagging(nn.Module):
                 elif tag.startswith('I') or tag.startswith('B'):
                     idx_buff.append(idx)
                     tag_buff.append(tag)
+            print(tag_buff)
             # 最后检查是否有剩余的实体需要添加
             if len(tag_buff) > 0:
                 slot = '-'.join(tag_buff[0].split('-')[1:])
@@ -114,6 +120,9 @@ class TaggingFNNDecoder(nn.Module):
         prob = torch.softmax(logits, dim=-1)
         # 如果提供了标签，计算损失
         if labels is not None:
+            # print(labels.clone().detach().cpu()[0])
+            # print(logits.clone().detach().cpu()[0])
+            # exit()
             loss = self.loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
             return prob, loss
         # 如果没有提供标签，仅返回概率分布

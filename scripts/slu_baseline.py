@@ -156,6 +156,7 @@ if not args.testing:
             cur_dataset = [train_dataset[k] for k in train_index[j: j + step_size]]
             # 创建当前批次的数据
             current_batch = from_example_list(args, cur_dataset, device, train=True)
+            # 通过 taggingfnn 模型的forward输出
             # 通过模型得到输出和损失
             output, loss = model(current_batch)
             # 累加损失
