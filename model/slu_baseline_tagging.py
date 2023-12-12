@@ -40,7 +40,6 @@ class SLUTagging(nn.Module):
         hiddens = self.dropout_layer(rnn_out)
         # 通过输出层得到标签的输出
         tag_output = self.output_layer(hiddens, tag_mask, tag_ids)
-        print(tag_output[0].size())
         # print(tag_ids[0])
         # print(tag_output[0][0])
         # exit()
