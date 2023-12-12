@@ -15,7 +15,9 @@ from utils.initialization import *
 from utils.example import Example
 from utils.batch import from_example_list
 from utils.vocab import PAD
-from model.slu_baseline_tagging import SLUTagging
+# from model.slu_baseline_tagging import SLUTagging
+from model.bilstm_crf import SLUTagging 
+
 
 # 初始化参数、设置随机种子和配置设备（CPU或GPU）
 args = init_args(sys.argv[1:])

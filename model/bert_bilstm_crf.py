@@ -2,6 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.utils.rnn as rnn_utils
+from TorchCRF import CRF
 
 # 定义 SLUTagging 类，继承自 nn.Module，用于构建双向 LSTM 的模型
 class SLUTagging(nn.Module):
@@ -18,8 +19,15 @@ class SLUTagging(nn.Module):
         self.rnn = getattr(nn, self.cell)(config.embed_size, config.hidden_size // 2, num_layers=config.num_layer, bidirectional=True, batch_first=True)
         # 添加 dropout 层以防止过拟合
         self.dropout_layer = nn.Dropout(p=config.dropout)
+        # CRF decoder 
+        self.hidden2tag = nn.Linear(config.hidden_size, config.num_tags)
+
+        self.crf = CRF(config.num_tags, batch_first=True)
+
+
         # 输出层，采用线性层后接 CrossEntropyLoss，用于标签预测
-        self.output_layer = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
+        # self.output_layer = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
+
 
     # 定义模型的前向传播
     def forward(self, batch):
@@ -28,6 +36,13 @@ class SLUTagging(nn.Module):
         tag_mask = batch.tag_mask
         input_ids = batch.input_ids
         lengths = batch.lengths
+        # turn mask to bool tensor
+        try:
+            tag_mask = tag_mask.bool()
+        except:
+            return input_ids, tag_ids
+
+
         # 将输入的词 ID 序列转换为词嵌入
         embed = self.word_embed(input_ids)
         # 打包填充的序列以便于 LSTM 处理可变长度的输入
@@ -37,13 +52,26 @@ class SLUTagging(nn.Module):
         rnn_out, unpacked_len = rnn_utils.pad_packed_sequence(packed_rnn_out, batch_first=True)
         # 应用 dropout
         hiddens = self.dropout_layer(rnn_out)
+        # bilstm计算发射分数
+        emissions = self.hidden2tag(hiddens)
+        if tag_ids is not None:
+            # 使用CRF计算损失
+            loss = -self.crf(emissions, tag_ids, mask=tag_mask, reduction='mean')
+            return emissions, loss
+        else:
+            # 解码（预测）时不计算损失
+            return (emissions, )
+
+
+
+
         # 通过输出层得到标签的输出
-        tag_output = self.output_layer(hiddens, tag_mask, tag_ids)
+        # tag_output = self.output_layer(hiddens, tag_mask, tag_ids)
         # print(tag_ids[0])
         # print(tag_output[0][0])
         # exit()
 
-        return tag_output
+        # return tag_output
 
     # 定义解码函数，用于从模型的输出中生成标签预测，并计算损失
     def decode(self, label_vocab, batch):
