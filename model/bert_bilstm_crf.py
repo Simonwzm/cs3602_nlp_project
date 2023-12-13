@@ -3,17 +3,24 @@ import torch
 import torch.nn as nn
 import torch.nn.utils.rnn as rnn_utils
 from TorchCRF import CRF
+from transformers import BertTokenizer, BertModel
+
+
 
 # 定义 SLUTagging 类，继承自 nn.Module，用于构建双向 LSTM 的模型
 class SLUTagging(nn.Module):
 
     def __init__(self, config):
         super(SLUTagging, self).__init__()
+
+        self.tokenizer = BertTokenizer.from_pretrained('bert-base-chinese')
+        self.bert = BertModel.from_pretrained('bert-base-chinese')
         # 存储配置参数
         self.config = config
         # 指定编码器的类型，这里使用 LSTM 或其他 RNN 变种
         self.cell = config.encoder_cell
         # 创建词嵌入层
+        #deprecated , use bert instead
         self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=0)
         # 构建双向 LSTM
         self.rnn = getattr(nn, self.cell)(config.embed_size, config.hidden_size // 2, num_layers=config.num_layer, bidirectional=True, batch_first=True)
@@ -42,9 +49,11 @@ class SLUTagging(nn.Module):
         except:
             return input_ids, tag_ids
 
+        encoded_input = self.tokenizer(input_ids, return_tensors='pt')
+        embed = self.bert(**encoded_input).last_hidden_state
 
-        # 将输入的词 ID 序列转换为词嵌入
-        embed = self.word_embed(input_ids)
+        # 将输入的词 ID 序列转换为词嵌入 deprecated , use bert instead
+        # embed = self.word_embed(input_ids)
         # 打包填充的序列以便于 LSTM 处理可变长度的输入
         packed_inputs = rnn_utils.pack_padded_sequence(embed, lengths, batch_first=True, enforce_sorted=True)
         packed_rnn_out, h_t_c_t = self.rnn(packed_inputs)  # 维度为 bsize x seqlen x dim
