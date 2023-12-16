@@ -1,0 +1,11 @@
+/datasets/weibo
+/cache
+/datasets/weibo_temp
+/datasets/
+/.filog
+/.fitconfig
+slu_cache
+weiboNER uni+bi
+*.vec
+__pycache__
+/logs
