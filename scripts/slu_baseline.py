@@ -4,6 +4,10 @@
 # 导入所需的库和模块
 import sys, os, time, gc, json
 from torch.optim import Adam
+from torch.utils.tensorboard import SummaryWriter
+
+os.environ['http_proxy'] = 'http://127.0.0.1:7890'
+os.environ['https_proxy'] = 'http://127.0.0.1:7890'
 
 # 设置安装路径以导入相关模块
 install_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,9 +19,10 @@ from utils.initialization import *
 from utils.example import Example
 from utils.batch import from_example_list
 from utils.vocab import PAD
-# from model.slu_baseline_tagging import SLUTagging
-from model.bilstm_crf import SLUTagging 
-
+# from model.slu_baseline_tagging import SLUTagging as SLUTagging
+# from model.bilstm_crf import SLUTagging 
+# from model.slu_bert_tagging import SLUTaggingBERTCascaded as SLUTagging
+from model.slu_bert_tagging import SLUTagging , SLUTaggingBERT
 
 # 初始化参数、设置随机种子和配置设备（CPU或GPU）
 args = init_args(sys.argv[1:])
@@ -31,13 +36,21 @@ print("Use GPU with index %s" % (args.device) if args.device >= 0 else "Use CPU 
 start_time = time.time()
 train_path = os.path.join(args.dataroot, 'train.json')
 dev_path = os.path.join(args.dataroot, 'development.json')
+test_path = os.path.join(args.dataroot, 'test_unlabelled.json')
 # 配置数据处理的相关参数
 Example.configuration(args.dataroot, train_path=train_path, word2vec_path=args.word2vec_path)
 # 加载训练和验证数据集
-train_dataset = Example.load_dataset(train_path)
-dev_dataset = Example.load_dataset(dev_path)
+train_dataset = Example.load_dataset(train_path, cheat=True)
+# Example.to_json(train_dataset, path='data/export_train.json')
+# exit()
+dev_dataset = Example.load_dataset(dev_path, cheat=False)
+# Example.to_json(dev_dataset, path='data/export_dev.json')
+test_dataset = Example.load_dataset(test_path, cheat=False)
+# Example.to_json(test_dataset, path='data/export_test.json')
 print("Load dataset and database finished, cost %.4fs ..." % (time.time() - start_time))
 print("Dataset size: train -> %d ; dev -> %d" % (len(train_dataset), len(dev_dataset)))
+experiment_name = args.experiment_name + '_lr_' + str(args.lr) + '_cheat_' + str(args.cheat)   + "_baseline_"
+writer = SummaryWriter(log_dir=args.log_dir + experiment_name)
 
 # 根据加载的数据配置模型参数
 args.vocab_size = Example.word_vocab.vocab_size
@@ -71,6 +84,7 @@ def decode(choice):
     model.eval()
     dataset = train_dataset if choice == 'train' else dev_dataset
     predictions, labels = [], []
+    noise_indicator = []
     total_loss, count = 0, 0
     # 不计算梯度，以加速和节省内存
     with torch.no_grad():
@@ -79,6 +93,11 @@ def decode(choice):
             cur_dataset = dataset[i: i + args.batch_size]
             # 创建当前批次的数据
             current_batch = from_example_list(args, cur_dataset, device, train=True)
+            has_manuscript = current_batch.has_manuscript
+            if has_manuscript:
+                noise = current_batch.noise
+            else:
+                noise = None
             # 解码模型预测
             pred, label, loss = model.decode(Example.label_vocab, current_batch)
             # 可选：如果预测中有异常，打印出来
@@ -88,11 +107,12 @@ def decode(choice):
             # 将预测结果和真实标签添加到列表中
             predictions.extend(pred)
             labels.extend(label)
+            noise_indicator.extend(noise)
             # 累加损失
             total_loss += loss
             count += 1
         # 计算总体指标
-        metrics = Example.evaluator.acc(predictions, labels)
+        metrics = Example.evaluator.acc(predictions, labels, noise_indicator)
     # 清理CUDA缓存和垃圾收集以释放内存
     torch.cuda.empty_cache()
     gc.collect()
@@ -160,7 +180,15 @@ if not args.testing:
             current_batch = from_example_list(args, cur_dataset, device, train=True)
             # 通过 taggingfnn 模型的forward输出
             # 通过模型得到输出和损失
-            output, loss = model(current_batch)
+            # output, loss = model(current_batch)
+            temp = model(current_batch)
+            if len(temp) == 2:
+                output, loss = temp
+            elif len(temp)==4:
+                # loss = sep_loss
+                output, loss, sep_loss, tag_loss = temp
+            if loss == 0 :
+                continue
             # 累加损失
             epoch_loss += loss.item()
             # 反向传播优化模型
@@ -169,6 +197,7 @@ if not args.testing:
             # 梯度清零
             optimizer.zero_grad()
             count += 1
+            writer.add_scalar('train/loss', loss.item(), i * (nsamples // step_size) + j // step_size)
         # 打印训练周期的统计信息
         print('Training: \tEpoch: %d\tTime: %.4f\tTraining Loss: %.4f' % (i, time.time() - start_time, epoch_loss / count))
         # 清理CUDA缓存和垃圾收集
@@ -179,6 +208,10 @@ if not args.testing:
         start_time = time.time()
         metrics, dev_loss = decode('dev')
         dev_acc, dev_fscore = metrics['acc'], metrics['fscore']
+        writer.add_scalar('dev/loss', dev_loss, i)
+        writer.add_scalar('dev/acc', dev_acc, i)
+        writer.add_scalar('dev/f1', dev_fscore['fscore'], i)
+
         print('Evaluation: \tEpoch: %d\tTime: %.4f\tDev acc: %.2f\tDev fscore(p/r/f): (%.2f/%.2f/%.2f)' % (i, time.time() - start_time, dev_acc, dev_fscore['precision'], dev_fscore['recall'], dev_fscore['fscore']))
         # 如果达到最佳结果，保存模型
         if dev_acc > best_result['dev_acc']:
@@ -186,11 +219,17 @@ if not args.testing:
             torch.save({
                 'epoch': i, 'model': model.state_dict(),
                 'optim': optimizer.state_dict(),
-            }, open('model.bin', 'wb'))
+            }, open(args.save_dir + experiment_name, 'wb'))
             print('NEW BEST MODEL: \tEpoch: %d\tDev loss: %.4f\tDev acc: %.2f\tDev fscore(p/r/f): (%.2f/%.2f/%.2f)' % (i, dev_loss, dev_acc, dev_fscore['precision'], dev_fscore['recall'], dev_fscore['fscore']))
+        if i % args.save_epoch == 0:
+            torch.save({
+                'epoch': i, 'model': model.state_dict(),
+                'optim': optimizer.state_dict(),
+            }, open(args.save_dir + experiment_name + str(i), 'wb'))
 
     # 打印最终的最佳结果
     print('FINAL BEST RESULT: \tEpoch: %d\tDev loss: %.4f\tDev acc: %.4f\tDev fscore(p/r/f): (%.4f/%.4f/%.4f)' % (best_result['iter'], best_result['dev_loss'], best_result['dev_acc'], best_result['dev_f1']['precision'], best_result['dev_f1']['recall'], best_result['dev_f1']['fscore']))
+    writer.close()
 # 如果是测试模式，进行评估和预测
 else:
     start_time = time.time()

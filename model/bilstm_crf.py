@@ -79,6 +79,8 @@ class SLUTagging(nn.Module):
         batch_size = len(batch)
         # 获取真实标签序列
         labels = batch.labels
+        print("check")
+        print(labels)
         # 获取模型的输出
         output = self.forward(batch)
         # 从输出中得到概率分布
@@ -96,7 +98,7 @@ class SLUTagging(nn.Module):
             for idx, tid in enumerate(pred):
                 tag = label_vocab.convert_idx_to_tag(tid)
                 pred_tags.append(tag)
-                print(tag)
+                # print(tag)
                 # 使用 B-I 标记方案来识别和提取实体
                 if (tag == 'O' or tag.startswith('B')) and len(tag_buff) > 0:
                     slot = '-'.join(tag_buff[0].split('-')[1:])
@@ -109,13 +111,14 @@ class SLUTagging(nn.Module):
                 elif tag.startswith('I') or tag.startswith('B'):
                     idx_buff.append(idx)
                     tag_buff.append(tag)
-            print(tag_buff)
+            # print(tag_buff)
             # 最后检查是否有剩余的实体需要添加
             if len(tag_buff) > 0:
                 slot = '-'.join(tag_buff[0].split('-')[1:])
                 value = ''.join([batch.utt[i][j] for j in idx_buff])
                 pred_tuple.append(f'{slot}-{value}')
             predictions.append(pred_tuple)
+        # print(predictions[0])
         # 如果没有提供标签，仅返回预测
         if len(output) == 1:
             return predictions

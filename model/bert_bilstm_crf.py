@@ -50,10 +50,9 @@ class SLUTagging(nn.Module):
             return input_ids, tag_ids
 
         encoded_input = self.tokenizer(input_ids, return_tensors='pt')
-        embed = self.bert(**encoded_input).last_hidden_state
 
         # 将输入的词 ID 序列转换为词嵌入 deprecated , use bert instead
-        # embed = self.word_embed(input_ids)
+        embed = self.word_embed(input_ids)
         # 打包填充的序列以便于 LSTM 处理可变长度的输入
         packed_inputs = rnn_utils.pack_padded_sequence(embed, lengths, batch_first=True, enforce_sorted=True)
         packed_rnn_out, h_t_c_t = self.rnn(packed_inputs)  # 维度为 bsize x seqlen x dim
@@ -63,6 +62,20 @@ class SLUTagging(nn.Module):
         hiddens = self.dropout_layer(rnn_out)
         # bilstm计算发射分数
         emissions = self.hidden2tag(hiddens)
+
+        embedding = self.bert(**encoded_input).last_hidden_state
+        # 打包填充的序列以便于 LSTM 处理可变长度的输入
+        packed_inputs = rnn_utils.pack_padded_sequence(embedding, lengths, batch_first=True, enforce_sorted=True)
+        packed_rnn_out, h_t_c_t = self.rnn(packed_inputs)  # 维度为 bsize x seqlen x dim
+        # 解包序列以将其转换回填充的格式
+        rnn_out, unpacked_len = rnn_utils.pad_packed_sequence(packed_rnn_out, batch_first=True)
+        # 应用 dropout
+        hiddens = self.dropout_layer(rnn_out)
+        # bilstm计算发射分数
+        emissions2 = self.hidden2tag(hiddens)
+
+        emissions = emissions + emissions2
+
         if tag_ids is not None:
             # 使用CRF计算损失
             loss = -self.crf(emissions, tag_ids, mask=tag_mask, reduction='mean')

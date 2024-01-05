@@ -19,3 +19,11 @@ FINAL BEST RESULT:      Epoch: 33       Dev loss: 5.6380       Dev acc: 70.7263 
 Evaluation:     Epoch: 499      Time: 0.7111    Dev acc: 65.70  Dev fscore(p/r/f): (74.61/69.24/71.82)
 FINAL BEST RESULT:      Epoch: 34       Dev loss: 4.4845        Dev acc: 69.7207        Dev fscore(p/r/f): (76.3996/72.5756/74.4385)
 ```
+
+## Lattice + BiLSTM + CRF
+
+```bash
+SpanFPreRecMetric: f=0.860412, pre=0.835556, rec=0.886792
+AccuracyMetric: acc=0.860711
+MyAccMetric: acc=0, fscore=0, P=0.828977709454266, R=0.8383210260396424
+```
