@@ -4,3 +4,6 @@ word2vec-768.txt
 /data/lexicon
 __pycache__
 model.bin
+/save
+/exp
+/run
