@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.utils.rnn as rnn_utils
 from transformers import BertModel
+from TorchCRF import CRF
 
 class SLU_decode(nn.Module):
     def __init__(self,):
@@ -132,7 +133,7 @@ class SLUTaggingBERTCascaded(SLU_decode):
         self.sep_layer=TaggingFNNDecoder(config.hidden_size, 4, config.tag_pad_idx,num_layers=2)
         self.decoder=BertModel.from_pretrained('hfl/chinese-bert-wwm-ext',is_decoder=True,add_cross_attention=True)
 
-        # self.sep_embed=nn.Linear(4,config.hidden_size)
+        self.sep_embed=nn.Linear(4,config.hidden_size)
         
     
     def forward(self, batch):
@@ -142,15 +143,15 @@ class SLUTaggingBERTCascaded(SLU_decode):
         input_ids = batch.input_ids
         lengths = batch.lengths
         
-        trans_output=self.transformer(input_ids)
+        trans_output=self.transformer(input_ids, attention_mask = tag_mask)
         trans_hidden=trans_output["last_hidden_state"]
 
-        _ , sep_loss=self.sep_layer(trans_hidden, tag_mask,sep_tag_ids)
-        decoder_out=self.decoder(input_ids,encoder_hidden_states=trans_hidden, attention_mask = tag_mask)
+        # _ , sep_loss=self.sep_layer(trans_hidden, tag_mask,sep_tag_ids)
+        # decoder_out=self.decoder(input_ids,encoder_hidden_states=trans_hidden, attention_mask = tag_mask)
         
         sep_prob , sep_loss=self.sep_layer(trans_hidden, tag_mask,sep_tag_ids)
         sep_embedded=self.sep_embed(sep_prob)
-        decoder_out=self.decoder(input_ids,encoder_hidden_states=trans_hidden+sep_embedded)
+        decoder_out=self.decoder(input_ids,encoder_hidden_states=trans_hidden+sep_embedded, attention_mask = tag_mask)
 
         hidden=decoder_out["last_hidden_state"]
         tag_output,tag_loss = self.output_layer(hidden, tag_mask, tag_ids)
@@ -166,7 +167,12 @@ class SLUTaggingBERT(SLU_decode):
         self.config = config
         self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=0)
         self.dropout_layer = nn.Dropout(p=config.dropout)
-        self.output_layer = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
+        if config.use_crf:
+            self.output_layer = TaggingFNNCRFDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
+        else:
+            self.output_layer2 = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
+        if not config.use_crf:
+            self.output_layer = self.output_layer2
         # self.transformer=BertModel.from_pretrained(config.model_name)
         self.transformer=BertModel.from_pretrained('hfl/chinese-bert-wwm-ext')
     
@@ -212,6 +218,38 @@ class TaggingFNNDecoder(nn.Module):
             loss = self.loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
             return prob, loss
         return prob, torch.tensor(0.)
+    
+class TaggingFNNCRFDecoder(nn.Module):
+    # 线性层输出 算交叉熵
+
+    # 如何利用slot
+
+    def __init__(self, input_size, num_tags, pad_id, num_layers=1):
+        super(TaggingFNNDecoder, self).__init__()
+        self.num_tags = num_tags
+        if num_layers==1:
+            self.output_layer = nn.Linear(input_size, num_tags)
+        else:
+            self.output_layer=nn.Sequential(nn.Linear(input_size, input_size),
+                                              nn.Tanh(), nn.Linear(input_size, num_tags))
+        # self.loss_fct = nn.CrossEntropyLoss(ignore_index=pad_id)
+        self.crf = CRF(num_tags, batch_first = True)
+    
+    def loss_func(self, logits,  labels, mask):
+
+        return -self.crf.forward(logits, labels, mask, reduction='mean')
+
+    def forward(self, hiddens, mask, labels=None):
+        
+
+        logits = self.output_layer(hiddens)
+        pred = self.crf.decode(logits, mask)
+
+        if labels is not None:
+            loss = self.lsos_func(logits, labels, mask)
+            return pred, loss
+
+        return pred, None
 
 class SLUTagging(SLU_decode):
 
@@ -241,3 +279,50 @@ class SLUTagging(SLU_decode):
         tag_output = self.output_layer(hiddens, tag_mask, tag_ids)
         # print(tag_output.shape,"tagout")
         return tag_output
+
+class SLUTaggingBERTLSTM(SLU_decode):
+    def __init__(self, config):
+        super(SLUTaggingBERTLSTM, self).__init__()
+        self.config = config
+        self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=0)
+        self.dropout_layer = nn.Dropout(p=config.dropout)
+        if config.use_crf:
+            self.output_layer = TaggingFNNCRFDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
+        else:
+            self.output_layer2 = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
+        if not config.use_crf:
+            self.output_layer = self.output_layer2
+        # self.transformer=BertModel.from_pretrained(config.model_name)
+        self.transformer=BertModel.from_pretrained('hfl/chinese-bert-wwm-ext')
+        self.config = config
+        self.cell = config.encoder_cell
+        self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=0)
+        self.rnn = getattr(nn, self.cell)(config.embed_size, config.hidden_size // 2, num_layers=config.num_layer, bidirectional=True, batch_first=True)
+        self.dropout_layer = nn.Dropout(p=config.dropout)
+        self.output_layer = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx)
+    
+    def forward(self, batch):
+        tag_ids = batch.tag_ids
+        tag_mask = batch.tag_mask
+        # sep_tag_ids=batch.sep_tag_ids
+        tag_mask = batch.tag_mask
+        input_ids = batch.input_ids
+        lengths = batch.lengths
+        
+        trans_output=self.transformer(input_ids, attention_mask = tag_mask)
+        # trans_output=self.transformer(input_ids)
+        hidden=trans_output["last_hidden_state"]
+
+        packed_inputs = rnn_utils.pack_padded_sequence(hidden, lengths, batch_first=True, enforce_sorted=True)
+        packed_rnn_out, h_t_c_t = self.rnn(packed_inputs)  # bsize x seqlen x dim
+        rnn_out, unpacked_len = rnn_utils.pad_packed_sequence(packed_rnn_out, batch_first=True)
+        hiddens = self.dropout_layer(rnn_out)
+        # print(hiddens.shape,"hiddens") #(32 47 512)
+        tag_output, tag_loss = self.output_layer(hiddens, tag_mask, tag_ids)
+        # print(tag_output.shape,"tagout")
+        return tag_output, tag_loss
+
+        # print(hidden.shape,output.shape,input_ids.shape)
+        # tag_output,tag_loss = self.output_layer(hidden, tag_mask, tag_ids)
+
+        # return tag_output, tag_loss

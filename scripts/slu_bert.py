@@ -10,10 +10,11 @@ from utils.initialization import *
 from utils.example_bert import Example
 from utils.batch import from_example_list
 from utils.vocab import PAD
-from model.slu_bert_tagging import SLUTaggingBERT, SLUTaggingBERTCascaded, SLUTaggingBERTMultiHead, SLUTagging
+from model.slu_bert_tagging import SLUTaggingBERT, SLUTaggingBERTCascaded, SLUTaggingBERTMultiHead, SLUTagging, SLUTaggingBERTLSTM
 
 import logging
 
+from torch.utils.tensorboard import SummaryWriter
 # initialization params, output path, logger, random seed and torch.device
 args = init_args(sys.argv[1:])
 set_random_seed(args.seed)
@@ -21,12 +22,13 @@ device = set_torch_device(args.device)
 print("Initialization finished ...")
 print("Random seed is set to %d" % (args.seed))
 print("Use GPU with index %s" % (args.device) if args.device >= 0 else "Use CPU as target torch device")
-
+experiment_name ='B' + args.experiment_name + '_lr_' + str(args.lr) + '_cheat_' + str(args.cheat)+ "_BertOnly" + "_augment3" + "_LSTMDec" 
+writer = SummaryWriter(log_dir=args.log_dir + experiment_name)
 start_time = time.time()
 
 # train_path = os.path.join(args.dataroot, args.train_path)
-train_path = os.path.join(args.dataroot, 'train_augment2.json')
-train_path = os.path.join(args.dataroot, 'train.json')
+# train_path = os.path.join(args.dataroot, 'train.json')
+train_path = os.path.join(args.dataroot, 'train_augment3.json')
 
 extend_cais, extend_ecdt = False, False
 train_path_cais, train_path_ecdt = None, None
@@ -92,7 +94,7 @@ args.tag_pad_idx = Example.label_vocab.convert_tag_to_idx(PAD)
 
 
 # model = SLUTagging(args).to(device)
-architectures = [SLUTaggingBERT, SLUTaggingBERTCascaded, SLUTaggingBERTMultiHead, SLUTagging]
+architectures = [SLUTaggingBERT, SLUTaggingBERTCascaded, SLUTaggingBERTMultiHead, SLUTagging, SLUTaggingBERTLSTM]
 model = architectures[args.architecture](args).to(device)
 if args.architecture == 0:
     Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
@@ -117,20 +119,29 @@ def decode(choice):
     model.eval()
     dataset = train_dataset if choice == 'train' else dev_dataset
     predictions, labels = [], []
+    noise_indicator = []
     total_loss, count = 0, 0
     with torch.no_grad():
         for i in range(0, len(dataset), args.batch_size):
             cur_dataset = dataset[i: i + args.batch_size]
             current_batch = from_example_list(args, cur_dataset, device, train=True)
+
+            has_manuscript = current_batch.has_manuscript
+            if has_manuscript:
+                noise = current_batch.noise
+            else:
+                noise = None
+
             pred, label, loss = model.decode(Example.label_vocab, current_batch)
             for j in range(len(current_batch)):
                 if any([l.split('-')[-1] not in current_batch.utt[j] for l in pred[j]]):
                     logger.info(current_batch.utt[j], pred[j], label[j])
             predictions.extend(pred)
             labels.extend(label)
+            noise_indicator.extend(noise)
             total_loss += loss
             count += 1
-        metrics = Example.evaluator.acc(predictions, labels,None)
+        metrics = Example.evaluator.acc(predictions, labels,noise_indicator)
     return metrics, total_loss / count
 
 def predict():
@@ -197,6 +208,7 @@ if not args.testing:
             optimizer.step()
             optimizer.zero_grad()
             count += 1
+            writer.add_scalar('train/loss', loss.item(), i * (nsamples // step_size) + j // step_size)
         # scheduler.step()
         logger.info('Training: \tEpoch: %d\tTime: %.4f\tTraining Loss: %.4f\tSep Loss: %.4f\tTag Loss: %.4f' % (i, time.time() - start_time, epoch_loss / count,epoch_sep_loss / count,epoch_tag_loss / count))
         # torch.cuda.empty_cache()
@@ -205,16 +217,20 @@ if not args.testing:
         start_time = time.time()
         metrics, dev_loss = decode('dev')
         dev_acc, dev_fscore = metrics['acc'], metrics['fscore']
+        writer.add_scalar('dev/loss', dev_loss, i)
+        writer.add_scalar('dev/acc', dev_acc, i)
+        writer.add_scalar('dev/f1', dev_fscore['fscore'], i)
         logger.info('Evaluation: \tEpoch: %d\tTime: %.4f\tDev acc: %.2f\tDev fscore(p/r/f): (%.2f/%.2f/%.2f)' % (i, time.time() - start_time, dev_acc, dev_fscore['precision'], dev_fscore['recall'], dev_fscore['fscore']))
         if dev_acc > best_result['dev_acc']:
             best_result['dev_loss'], best_result['dev_acc'], best_result['dev_f1'], best_result['iter'] = dev_loss, dev_acc, dev_fscore, i
             torch.save({
                 'epoch': i, 'model': model.state_dict(),
                 'optim': optimizer.state_dict(),
-            }, open('model.bin', 'wb'))
+            }, open(args.save_dir + experiment_name, 'wb'))
             logger.info('NEW BEST MODEL: \tEpoch: %d\tDev loss: %.4f\tDev acc: %.2f\tDev fscore(p/r/f): (%.2f/%.2f/%.2f)' % (i, dev_loss, dev_acc, dev_fscore['precision'], dev_fscore['recall'], dev_fscore['fscore']))
 
     logger.info('FINAL BEST RESULT: \tEpoch: %d\tDev loss: %.4f\tDev acc: %.4f\tDev fscore(p/r/f): (%.4f/%.4f/%.4f)' % (best_result['iter'], best_result['dev_loss'], best_result['dev_acc'], best_result['dev_f1']['precision'], best_result['dev_f1']['recall'], best_result['dev_f1']['fscore']))
+    writer.close()
 else:
     start_time = time.time()
     metrics, dev_loss = decode('dev')

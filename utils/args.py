@@ -21,11 +21,11 @@ def add_argument_base(arg_parser):
     #### Training Hyperparams ####
     arg_parser.add_argument('--batch_size', default=32, type=int, help='Batch size')
     arg_parser.add_argument('--lr', type=float, default=5e-6, help='learning rate')
-    arg_parser.add_argument('--max_epoch', type=int, default=50, help='terminate after maximum epochs')
+    arg_parser.add_argument('--max_epoch', type=int, default=100, help='terminate after maximum epochs')
     #### Common Encoder Hyperparams ####
     arg_parser.add_argument('--encoder_cell', default='LSTM', choices=['LSTM', 'GRU', 'RNN'], help='root of data')
+    # arg_parser.add_argument('--embed_size', default=768, type=int, help='Size of word embeddings')
     arg_parser.add_argument('--embed_size', default=768, type=int, help='Size of word embeddings')
-    # arg_parser.add_argument('--embed_size', default=50, type=int, help='Size of word embeddings')
     arg_parser.add_argument('--hidden_size', default=768, type=int, help='hidden size')
     arg_parser.add_argument('--num_layer', default=2, type=int, help='number of layer')
     arg_parser.add_argument('--cheat', default=True, type=bool, help='if true, use manual_transcript not asr_1best')
@@ -36,7 +36,7 @@ def add_argument_base(arg_parser):
     arg_parser.add_argument('--gamma', type=float, default=0.5, help='gamma for step scheduler')
     arg_parser.add_argument('--warmup_steps', type=int, default=0, help='warmup steps for scheduler')
     arg_parser.add_argument('--max_lr', type=float, default=0.01, help='max learning rate for cosine scheduler')
-    arg_parser.add_argument('--dropout', type=float, default=0.2, help='feature dropout rate')
+    arg_parser.add_argument('--dropout', type=float, default=0.3, help='feature dropout rate')
     # arg_parser.add_argument('--vocab_embed_size', default=300, type=int, help='Size of word embeddings')
     arg_parser.add_argument('--model_name', default="hfl/chinese-bert-wwm-ext", help='name of pretrained model')
     
@@ -44,8 +44,9 @@ def add_argument_base(arg_parser):
     arg_parser.add_argument('--use_asr', default=0, type=int, help='use asr or manual script')
     arg_parser.add_argument('--train_mix', default=0, type=int, help='train by turns')    
 
-    arg_parser.add_argument('--architecture', default="0", type=int, help='bert model architecutre')
+    arg_parser.add_argument('--architecture', default="4", type=int, help='bert model architecutre')
     arg_parser.add_argument('--info', default='exp', type=str, help='info')
+    arg_parser.add_argument('--use_crf', default=False, type=bool, help='use bert')
 
 
 
@@ -53,6 +54,6 @@ def add_argument_base(arg_parser):
     arg_parser.add_argument("--log_dir", default="run/", type=str, help="log dir")
     arg_parser.add_argument("--save_dir", default="save/", type=str, help="save dir")
     arg_parser.add_argument("--log_step", default=10, type=int, help="log step")
-    arg_parser.add_argument("--save_epoch", default=20, type=int, help="save step")
+    arg_parser.add_argument("--save_epoch", default=50, type=int, help="save step")
     arg_parser.add_argument("--experiment_name", default="train1", type=str, help="experiment name")
     return arg_parser

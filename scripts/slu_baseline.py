@@ -20,9 +20,10 @@ from utils.example import Example
 from utils.batch import from_example_list
 from utils.vocab import PAD
 # from model.slu_baseline_tagging import SLUTagging as SLUTagging
+from model.slu_baseline_tagging import SLUTaggingBERT as SLUTagging
 # from model.bilstm_crf import SLUTagging 
 # from model.slu_bert_tagging import SLUTaggingBERTCascaded as SLUTagging
-from model.slu_bert_tagging import SLUTagging , SLUTaggingBERT
+# from model.slu_bert_tagging import SLUTagging , SLUTaggingBERT
 
 # 初始化参数、设置随机种子和配置设备（CPU或GPU）
 args = init_args(sys.argv[1:])
@@ -49,7 +50,7 @@ test_dataset = Example.load_dataset(test_path, cheat=False)
 # Example.to_json(test_dataset, path='data/export_test.json')
 print("Load dataset and database finished, cost %.4fs ..." % (time.time() - start_time))
 print("Dataset size: train -> %d ; dev -> %d" % (len(train_dataset), len(dev_dataset)))
-experiment_name = args.experiment_name + '_lr_' + str(args.lr) + '_cheat_' + str(args.cheat)   + "_baseline_"
+experiment_name = args.experiment_name + '_lr_' + str(args.lr) + '_cheat_' + str(args.cheat)+  "_bertOnly_" + "LSTM_Dec"
 writer = SummaryWriter(log_dir=args.log_dir + experiment_name)
 
 # 根据加载的数据配置模型参数
