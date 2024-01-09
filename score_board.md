@@ -20,6 +20,11 @@ dev acc = 79.22
 dev f1 = 82.17
 epoch = 95
 
+## Bert + CRF
+dev acc = 78.66
+dev f1 = 82.06
+epoch = 85
+
 
 ## Bert + LSTM + augmentation
 dev acc = 77.88
@@ -38,6 +43,9 @@ dev acc = 77.09
 dev f1 = 80.61
 epoch = 99
 
+## baseline + old augmentation
+dev acc = TBD
+
 ## baseline + import dictionary
 dev acc = 73.74
 dev f1 = 76.68
@@ -48,5 +56,17 @@ epoch = 100
 
 
 
-## BiLSTM + Cheat
-Dev 
+
+## Bert+Multi-task
+dev acc = 78.2
+dev f1 = 80.95 
+epoch = 87
+
+## Bert+Multi-task+augmentation
+dev acc = 77.32 TBD
+dev f1 = 80.91
+epoch = 73
+
+
+
+
