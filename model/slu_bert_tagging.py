@@ -146,9 +146,7 @@ class SLUTaggingBERTCascaded(SLU_decode):
         trans_output=self.transformer(input_ids, attention_mask = tag_mask)
         trans_hidden=trans_output["last_hidden_state"]
 
-        # _ , sep_loss=self.sep_layer(trans_hidden, tag_mask,sep_tag_ids)
-        # decoder_out=self.decoder(input_ids,encoder_hidden_states=trans_hidden, attention_mask = tag_mask)
-        
+      
         sep_prob , sep_loss=self.sep_layer(trans_hidden, tag_mask,sep_tag_ids)
         sep_embedded=self.sep_embed(sep_prob)
         decoder_out=self.decoder(input_ids,encoder_hidden_states=trans_hidden+sep_embedded, attention_mask = tag_mask)
@@ -167,12 +165,15 @@ class SLUTaggingBERT(SLU_decode):
         self.config = config
         self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=0)
         self.dropout_layer = nn.Dropout(p=config.dropout)
+        self.use_crf = config.use_crf
         if config.use_crf:
-            self.output_layer = TaggingFNNCRFDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
+            self.output_layer = TaggingFNNCRFDecoder(config.hidden_size, 4, config.tag_pad_idx,num_layers=1)
+            self.output_layer2 = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
         else:
             self.output_layer2 = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
-        if not config.use_crf:
             self.output_layer = self.output_layer2
+        # if not config.use_crf:
+        #     self.output_layer = self.output_layer2
         # self.transformer=BertModel.from_pretrained(config.model_name)
         self.transformer=BertModel.from_pretrained('hfl/chinese-bert-wwm-ext')
     
@@ -189,9 +190,13 @@ class SLUTaggingBERT(SLU_decode):
         hidden=trans_output["last_hidden_state"]
 
         # print(hidden.shape,output.shape,input_ids.shape)
-        tag_output,tag_loss = self.output_layer(hidden, tag_mask, tag_ids)
-
-        return tag_output, tag_loss
+        if self.use_crf:
+            tag_output,tag_loss = self.output_layer2(hidden, tag_mask, tag_ids)
+            sep_tag_out, sep_tag_loss = self.output_layer(hidden, tag_mask, sep_tag_ids)
+            return tag_output, tag_loss+sep_tag_loss
+        else:
+            tag_output,tag_loss = self.output_layer2(hidden, tag_mask, tag_ids)
+            return tag_output, tag_loss
 
 class TaggingFNNDecoder(nn.Module):
     # 线性层输出 算交叉熵
@@ -225,7 +230,7 @@ class TaggingFNNCRFDecoder(nn.Module):
     # 如何利用slot
 
     def __init__(self, input_size, num_tags, pad_id, num_layers=1):
-        super(TaggingFNNDecoder, self).__init__()
+        super(TaggingFNNCRFDecoder, self).__init__()
         self.num_tags = num_tags
         if num_layers==1:
             self.output_layer = nn.Linear(input_size, num_tags)
@@ -236,17 +241,18 @@ class TaggingFNNCRFDecoder(nn.Module):
         self.crf = CRF(num_tags, batch_first = True)
     
     def loss_func(self, logits,  labels, mask):
-
+        mask = mask.bool()
         return -self.crf.forward(logits, labels, mask, reduction='mean')
 
     def forward(self, hiddens, mask, labels=None):
         
 
+        mask = mask.bool()
         logits = self.output_layer(hiddens)
         pred = self.crf.decode(logits, mask)
 
         if labels is not None:
-            loss = self.lsos_func(logits, labels, mask)
+            loss = self.loss_func(logits, labels, mask)
             return pred, loss
 
         return pred, None
@@ -286,11 +292,12 @@ class SLUTaggingBERTLSTM(SLU_decode):
         self.config = config
         self.word_embed = nn.Embedding(config.vocab_size, config.embed_size, padding_idx=0)
         self.dropout_layer = nn.Dropout(p=config.dropout)
+        self.use_crf = config.use_crf
         if config.use_crf:
-            self.output_layer = TaggingFNNCRFDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
+            self.output_layer = TaggingFNNCRFDecoder(config.hidden_size, 4, config.tag_pad_idx,num_layers=1)
+            self.output_layer2 = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
         else:
             self.output_layer2 = TaggingFNNDecoder(config.hidden_size, config.num_tags, config.tag_pad_idx,num_layers=1)
-        if not config.use_crf:
             self.output_layer = self.output_layer2
         # self.transformer=BertModel.from_pretrained(config.model_name)
         self.transformer=BertModel.from_pretrained('hfl/chinese-bert-wwm-ext')
@@ -304,7 +311,7 @@ class SLUTaggingBERTLSTM(SLU_decode):
     def forward(self, batch):
         tag_ids = batch.tag_ids
         tag_mask = batch.tag_mask
-        # sep_tag_ids=batch.sep_tag_ids
+        sep_tag_ids=batch.sep_tag_ids
         tag_mask = batch.tag_mask
         input_ids = batch.input_ids
         lengths = batch.lengths
@@ -317,10 +324,21 @@ class SLUTaggingBERTLSTM(SLU_decode):
         packed_rnn_out, h_t_c_t = self.rnn(packed_inputs)  # bsize x seqlen x dim
         rnn_out, unpacked_len = rnn_utils.pad_packed_sequence(packed_rnn_out, batch_first=True)
         hiddens = self.dropout_layer(rnn_out)
-        # print(hiddens.shape,"hiddens") #(32 47 512)
-        tag_output, tag_loss = self.output_layer(hiddens, tag_mask, tag_ids)
-        # print(tag_output.shape,"tagout")
-        return tag_output, tag_loss
+
+        if self.use_crf:
+            tag_output,tag_loss = self.output_layer2(hidden, tag_mask, tag_ids)
+            sep_tag_out, sep_tag_loss = self.output_layer(hidden, tag_mask, sep_tag_ids)
+            return tag_output, tag_loss+sep_tag_loss
+        else:
+            tag_output,tag_loss = self.output_layer2(hidden, tag_mask, tag_ids)
+            return tag_output, tag_loss
+
+
+
+        # # print(hiddens.shape,"hiddens") #(32 47 512)
+        # tag_output, tag_loss = self.output_layer(hiddens, tag_mask, tag_ids)
+        # # print(tag_output.shape,"tagout")
+        # return tag_output, tag_loss
 
         # print(hidden.shape,output.shape,input_ids.shape)
         # tag_output,tag_loss = self.output_layer(hidden, tag_mask, tag_ids)

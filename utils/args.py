@@ -14,7 +14,7 @@ def add_argument_base(arg_parser):
     #### General configuration ####
     arg_parser.add_argument('--dataroot', default='./data', help='root of data')
     arg_parser.add_argument('--word2vec_path', default='./word2vec-768.txt', help='path of word2vector file path')
-    # arg_parser.add_argument('--word2vec_path', default='../Flat-Lattice-Transformer/output_mix.txt', help='path of word2vector file path')
+    # arg_parser.add_argument('--word2vec_path', default='./output_mix.txt', help='path of word2vector file path')
     arg_parser.add_argument('--seed', default=999, type=int, help='Random seed')
     arg_parser.add_argument('--device', type=int, default=0, help='Use which device: -1 -> cpu ; the index of gpu o.w.')
     arg_parser.add_argument('--testing', action='store_true', help='training or evaluation mode')
@@ -44,16 +44,16 @@ def add_argument_base(arg_parser):
     arg_parser.add_argument('--use_asr', default=0, type=int, help='use asr or manual script')
     arg_parser.add_argument('--train_mix', default=0, type=int, help='train by turns')    
 
-    arg_parser.add_argument('--architecture', default="4", type=int, help='bert model architecutre')
+    arg_parser.add_argument('--architecture', default="1", type=int, help='bert model architecutre')
     arg_parser.add_argument('--info', default='exp', type=str, help='info')
     arg_parser.add_argument('--use_crf', default=False, type=bool, help='use bert')
-
+    arg_parser.add_argument('--aug_level', default=0, type=int, help='augmentation level')
 
 
     #### Babysitting Hyperparams ####
     arg_parser.add_argument("--log_dir", default="run/", type=str, help="log dir")
-    arg_parser.add_argument("--save_dir", default="save/", type=str, help="save dir")
+    arg_parser.add_argument("--save_dir", default="save2/", type=str, help="save dir")
     arg_parser.add_argument("--log_step", default=10, type=int, help="log step")
-    arg_parser.add_argument("--save_epoch", default=50, type=int, help="save step")
+    arg_parser.add_argument("--save_epoch", default=49, type=int, help="save step")
     arg_parser.add_argument("--experiment_name", default="train1", type=str, help="experiment name")
     return arg_parser

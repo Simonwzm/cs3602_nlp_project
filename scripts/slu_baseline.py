@@ -19,8 +19,8 @@ from utils.initialization import *
 from utils.example import Example
 from utils.batch import from_example_list
 from utils.vocab import PAD
-# from model.slu_baseline_tagging import SLUTagging as SLUTagging
-from model.slu_baseline_tagging import SLUTaggingBERT as SLUTagging
+from model.slu_baseline_tagging import SLUTagging as SLUTagging
+# from model.slu_baseline_tagging import SLUTaggingBERT as SLUTagging
 # from model.bilstm_crf import SLUTagging 
 # from model.slu_bert_tagging import SLUTaggingBERTCascaded as SLUTagging
 # from model.slu_bert_tagging import SLUTagging , SLUTaggingBERT
@@ -35,7 +35,15 @@ print("Use GPU with index %s" % (args.device) if args.device >= 0 else "Use CPU 
 
 # 加载数据集
 start_time = time.time()
-train_path = os.path.join(args.dataroot, 'train.json')
+if args.aug_level == 0:
+    train_path = os.path.join(args.dataroot, 'train.json')
+elif args.aug_level == 1:
+    train_path = os.path.join(args.dataroot, 'train_augment2.json')
+elif args.aug_level == 2:
+    train_path = os.path.join(args.dataroot, 'train_augment3.json')
+else:
+    print('Unsppported augmentation level, use default train.json instead')
+    train_path = os.path.join(args.dataroot, 'train.json')
 dev_path = os.path.join(args.dataroot, 'development.json')
 test_path = os.path.join(args.dataroot, 'test_unlabelled.json')
 # 配置数据处理的相关参数
@@ -50,7 +58,7 @@ test_dataset = Example.load_dataset(test_path, cheat=False)
 # Example.to_json(test_dataset, path='data/export_test.json')
 print("Load dataset and database finished, cost %.4fs ..." % (time.time() - start_time))
 print("Dataset size: train -> %d ; dev -> %d" % (len(train_dataset), len(dev_dataset)))
-experiment_name = args.experiment_name + '_lr_' + str(args.lr) + '_cheat_' + str(args.cheat)+  "_bertOnly_" + "LSTM_Dec"
+experiment_name = args.experiment_name + '_lr_' + str(args.lr) + '_cheat_' + str(args.cheat)+  "_baseline_" + "augment2"
 writer = SummaryWriter(log_dir=args.log_dir + experiment_name)
 
 # 根据加载的数据配置模型参数
