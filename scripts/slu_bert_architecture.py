@@ -10,7 +10,7 @@ from utils.initialization import *
 from utils.example_bert import Example
 from utils.batch import from_example_list
 from utils.vocab import PAD
-from model.slu_bert_tagging import SLUTaggingBERT, SLUTaggingBERTCascaded, SLUTaggingBERTMultiHead, SLUTagging, SLUTaggingBERTLSTM
+from model.slu_bert_tagging import SLUTaggingBERT, SLUTaggingBERTCascaded,  SLUTagging, SLUTaggingBERTLSTM
 
 import logging
 
@@ -86,8 +86,8 @@ args.num_tags = Example.label_vocab.num_tags
 args.num_slots = Example.label_vocab.num_slots
 args.tag_pad_idx = Example.label_vocab.convert_tag_to_idx(PAD)
 
-
-architectures = [SLUTaggingBERT, SLUTaggingBERTCascaded, SLUTaggingBERTMultiHead, SLUTagging, SLUTaggingBERTLSTM]
+# 占位
+architectures = [SLUTaggingBERT, SLUTaggingBERTCascaded, None, SLUTagging, SLUTaggingBERTLSTM]
 model = architectures[args.architecture](args).to(device)
 if args.architecture == 0:
     Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
