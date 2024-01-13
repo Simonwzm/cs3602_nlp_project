@@ -1,4 +1,4 @@
-# CS3602_nlp_project
+# 【Dev Branch】【Deprecated】CS3602_nlp_project
 NLP Group Project 
 
 Author: 王梓萌 刘洺皓
