@@ -165,6 +165,8 @@ class TaggingFNNCRFDecoder(nn.Module):
                                               nn.Tanh(), nn.Linear(input_size, num_tags))
         # self.loss_fct = nn.CrossEntropyLoss(ignore_index=pad_id)
         self.crf = CRF(num_tags, batch_first = True)
+
+        self.crf.transitions.data[1, 2] = float('-inf')
     
     def loss_func(self, logits,  labels, mask):
         mask = mask.bool()

@@ -12,6 +12,7 @@ https://jbox.sjtu.edu.cn/l/G1M2t6
 ```python
 python ./scripts/slu_bert_architecture.py --use_crf False --architecture 4 --testing
 ```
+测试其他模型，只需按照训练的脚本，加上 `--testing` 同时将model.bin替换为相应模型的bin即可
 
 1. 训练BertOnly模型：
 ```
