@@ -1,6 +1,7 @@
 data/
 slu/fastnlp/
 slu/adaseq/
+llm_prompt_engineering_latex/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
