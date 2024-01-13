@@ -2,22 +2,28 @@
 
 class Evaluator():
 
-    def acc(self, predictions, labels):
+    def acc(self, predictions, labels, noise_indicator=None):
         metric_dicts = {}
-        metric_dicts['acc'] = self.accuracy(predictions, labels)
-        metric_dicts['fscore'] = self.fscore(predictions, labels)
+        metric_dicts['acc'] = self.accuracy(predictions, labels, noise_indicator)
+        metric_dicts['fscore'] = self.fscore(predictions, labels, noise_indicator)
         return metric_dicts
 
     @staticmethod
-    def accuracy(predictions, labels):
+    def accuracy(predictions, labels, noise_indicator=None):
         corr, total = 0, 0
         for i, pred in enumerate(predictions):
             total += 1
+            
             corr += set(pred) == set(labels[i])
+            if (noise_indicator is not None) and (not noise_indicator[i]):
+                if not(set(pred) == set(labels[i])):
+                    print("error pred and label")
+                    print(pred, labels[i])
         return 100 * corr / total
 
     @staticmethod
-    def fscore(predictions, labels):
+    def fscore(predictions, labels, noise_indicator=None):
+
         TP, TP_FP, TP_FN = 0, 0, 0
         for i in range(len(predictions)):
             pred = set(predictions[i])
