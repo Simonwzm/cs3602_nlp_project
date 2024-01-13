@@ -1,4 +1,4 @@
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 import torch
 
 
@@ -12,9 +12,9 @@ def from_example_list(args, ex_list, device='cpu', train=True):
     input_lens = [len(ex.input_idx) for ex in ex_list]
     max_len = max(input_lens)
     input_ids = [ex.input_idx + [pad_idx] * (max_len - len(ex.input_idx)) for ex in ex_list]
-    batch.input_ids = torch.tensor(input_ids, dtype=torch.long, device=device)
-    batch.lengths = input_lens
-    batch.did = [ex.did for ex in ex_list]
+    batch.input_ids = torch.tensor(input_ids, dtype=torch.long, device=device)  # ! word_vocab module
+    batch.lengths = input_lens  # ! input_text_length.
+    batch.did = [ex.did for ex in ex_list]  # ! did:index di-ui
 
     if train:
         batch.labels = [ex.slotvalue for ex in ex_list]
@@ -22,8 +22,10 @@ def from_example_list(args, ex_list, device='cpu', train=True):
         max_tag_lens = max(tag_lens)
         tag_ids = [ex.tag_id + [tag_pad_idx] * (max_tag_lens - len(ex.tag_id)) for ex in ex_list]
         tag_mask = [[1] * len(ex.tag_id) + [0] * (max_tag_lens - len(ex.tag_id)) for ex in ex_list]
+        intent_ids = [ex.intent for ex in ex_list]
         batch.tag_ids = torch.tensor(tag_ids, dtype=torch.long, device=device)
         batch.tag_mask = torch.tensor(tag_mask, dtype=torch.float, device=device)
+        batch.intent_ids = torch.tensor(intent_ids, dtype=torch.int64, device=device)
     else:
         batch.labels = None
         batch.tag_ids = None

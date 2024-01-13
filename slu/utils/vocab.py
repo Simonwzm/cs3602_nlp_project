@@ -1,5 +1,6 @@
-#coding=utf8
-import os, json
+# coding=utf8
+import os
+import json
 PAD = '<pad>'
 UNK = '<unk>'
 BOS = '<s>'
@@ -79,3 +80,33 @@ class LabelVocab():
     @property
     def num_tags(self):
         return len(self.tag2idx)
+
+
+class IntentVocab():
+
+    def __init__(self, root):
+        self.intent2idx, self.idx2intent = {}, {}
+        self.intent2idx['O'] = 1
+        self.idx2intent[1] = 'O'
+        self.from_filepath(root)
+
+    def from_filepath(self, root):
+        ontology = json.load(open(os.path.join(root, 'ontology.json'), 'r', encoding="utf-8"))
+        acts = ontology['acts']
+        slots = ontology['slots']
+
+        for act in acts:
+            for slot in slots:
+                idx = len(self.intent2idx)
+                tag = f'{act}-{slot}'
+                self.intent2idx[tag], self.idx2intent[idx] = idx, tag
+
+    def convert_intent_to_idx(self, tag):
+        return self.intent2idx[tag]
+
+    def convert_idx_to_intent(self, idx):
+        return self.idx2intent[idx]
+
+    @property
+    def num_tags(self):
+        return len(self.intent2idx)

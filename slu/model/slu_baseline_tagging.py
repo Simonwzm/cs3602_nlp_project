@@ -1,9 +1,11 @@
-#coding=utf8
+# coding=utf8
 import torch
 import torch.nn as nn
 import torch.nn.utils.rnn as rnn_utils
 
 # 定义 SLUTagging 类，继承自 nn.Module，用于构建双向 LSTM 的模型
+
+
 class SLUTagging(nn.Module):
 
     def __init__(self, config):
@@ -33,13 +35,15 @@ class SLUTagging(nn.Module):
         embed = self.word_embed(input_ids)
         # 打包填充的序列以便于 LSTM 处理可变长度的输入
         packed_inputs = rnn_utils.pack_padded_sequence(embed, lengths, batch_first=True, enforce_sorted=True)
-        packed_rnn_out, h_t_c_t = self.rnn(packed_inputs)  # 维度为 bsize x seqlen x dim
+        packed_rnn_out, h_t_c_t = self.rnn(packed_inputs)
         # 解包序列以将其转换回填充的格式
         rnn_out, unpacked_len = rnn_utils.pad_packed_sequence(packed_rnn_out, batch_first=True)
         # 应用 dropout
         hiddens = self.dropout_layer(rnn_out)
         # 通过输出层得到标签的输出
         tag_output = self.output_layer(hiddens, tag_mask, tag_ids)
+        # ! tag_output(instance of list): 0:32x20x74 1:single element.
+        # ! num_tags: 74
         # print(tag_ids[0])
         # print(tag_output[0][0])
         # exit()
@@ -49,6 +53,7 @@ class SLUTagging(nn.Module):
     # 定义解码函数，用于从模型的输出中生成标签预测，并计算损失
     def decode(self, label_vocab, batch):
         # 获取批次大小
+        # ! batch: did/examples/input_ids:32x20/labels:["inform-地点-哈尔滨医科大学附属", "inform-操作-导航"]/tag_ids(from convert_tag_to_idx func)/tag_mask/utts(text instances)
         batch_size = len(batch)
         # 获取真实标签序列
         labels = batch.labels
@@ -62,14 +67,14 @@ class SLUTagging(nn.Module):
             # 根据概率的最大值选择预测的标签
             pred = torch.argmax(prob[i], dim=-1).cpu().tolist()
             pred_tuple = []
-            idx_buff, tag_buff, pred_tags = [], [], []
+            idx_buff, tag_buff, pred_tags, check_continous_flag = [], [], [], None
             # 保持预测长度与真实句子长度一致
             pred = pred[:len(batch.utt[i])]
             # 将标签索引转换为标签字符串，并生成标记的元组
             for idx, tid in enumerate(pred):
                 tag = label_vocab.convert_idx_to_tag(tid)
                 pred_tags.append(tag)
-                print(tag)
+                # print(tag)
                 # 使用 B-I 标记方案来识别和提取实体
                 if (tag == 'O' or tag.startswith('B')) and len(tag_buff) > 0:
                     slot = '-'.join(tag_buff[0].split('-')[1:])
@@ -77,12 +82,19 @@ class SLUTagging(nn.Module):
                     idx_buff, tag_buff = [], []
                     pred_tuple.append(f'{slot}-{value}')
                     if tag.startswith('B'):
+                        # check_continous_flag = '-'.join(tag.split('-')[1:])
                         idx_buff.append(idx)
                         tag_buff.append(tag)
                 elif tag.startswith('I') or tag.startswith('B'):
+                    # if tag.startswith("B"):
+                    # assert len(idx_buff) == 0 and len(tag_buff) == 0
+                    # check_continous_flag = '-'.join(tag.split('-')[1:])
+                    # elif tag.startswith("I"):
+                    # assert len(idx_buff) > 0 and len(tag_buff) > 0
+                    # assert check_continous_flag == '-'.join(tag.split('-')[1:])
                     idx_buff.append(idx)
                     tag_buff.append(tag)
-            print(tag_buff)
+            # print(tag_buff)
             # 最后检查是否有剩余的实体需要添加
             if len(tag_buff) > 0:
                 slot = '-'.join(tag_buff[0].split('-')[1:])
@@ -98,6 +110,8 @@ class SLUTagging(nn.Module):
             return predictions, labels, loss.cpu().item()
 
 # 定义 TaggingFNNDecoder 类，用于 SLUTagging 模型中的输出层
+
+
 class TaggingFNNDecoder(nn.Module):
 
     def __init__(self, input_size, num_tags, pad_id):
