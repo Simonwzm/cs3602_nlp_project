@@ -9,7 +9,7 @@ Author: 王梓萌 刘洺皓
 环境配置使用requirements.txt进行配置
 我们使用的python版本为3.11.6
 
-
+[Task1 报告链接](https://github.com/Simonwzm/cs3602_nlp_project/branches)
 
 ![image](https://github.com/Simonwzm/cs3602_nlp_project/assets/83553265/08236ec0-28dd-4aee-8607-6b5f1469bb5b)
 
